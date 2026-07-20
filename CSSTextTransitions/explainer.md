@@ -14,33 +14,42 @@
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
-- [Introduction](#introduction)
-- [User-Facing Problem](#user-facing-problem)
-  - [Goals](#goals)
-- [Proposed Approach](#proposed-approach)
-  - [Scenario 1: Flowing in text](#scenario-1-flowing-in-text)
-  - [Scenario 2: Typing indicator](#scenario-2-typing-indicator)
-  - [Scenario 3: Loading shimmer](#scenario-3-loading-shimmer)
-  - [Details and open questions](#details-and-open-questions)
-    - [Animation application](#animation-application)
-    - [Nested elements](#nested-elements)
-    - [Adding text content to an element](#adding-text-content-to-an-element)
-    - [Generated content](#generated-content)
-    - [Animation and transition events](#animation-and-transition-events)
-- [Prior Art](#prior-art)
-- [Accessibility, Internationalization, Privacy, and Security Considerations](#accessibility-internationalization-privacy-and-security-considerations)
-  - [Accessibility](#accessibility)
-  - [Internationalization](#internationalization)
-  - [Privacy and Security](#privacy-and-security)
-- [References & acknowledgements](#references--acknowledgements)
+- [CSS Text Transitions \& Animations](#css-text-transitions--animations)
+  - [Author](#author)
+  - [Participate](#participate)
+  - [Table of Contents](#table-of-contents)
+  - [Introduction](#introduction)
+  - [User-Facing Problem](#user-facing-problem)
+    - [Goals](#goals)
+    - [Non-goals](#non-goals)
+  - [User research](#user-research)
+  - [Proposed Approach](#proposed-approach)
+    - [`::nth-word()` and `::nth-letter()` pseudo-elements](#nth-word-and-nth-letter-pseudo-elements)
+    - [The `parse()` function](#the-parse-function)
+    - [Scenario 1: Flowing in text](#scenario-1-flowing-in-text)
+    - [Scenario 2: Typing indicator](#scenario-2-typing-indicator)
+    - [Scenario 3: Loading shimmer](#scenario-3-loading-shimmer)
+    - [Details and open questions](#details-and-open-questions)
+      - [Nested elements](#nested-elements)
+      - [Words spanning element boundaries](#words-spanning-element-boundaries)
+      - [Generated content](#generated-content)
+  - [Alternatives considered](#alternatives-considered)
+    - [Text animation properties](#text-animation-properties)
+    - [Custom Highlights](#custom-highlights)
+    - [`word-index()` instead of using counters](#word-index-instead-of-using-counters)
+  - [Prior Art](#prior-art)
+  - [Accessibility, Internationalization, Privacy, and Security Considerations](#accessibility-internationalization-privacy-and-security-considerations)
+    - [Accessibility](#accessibility)
+    - [Internationalization](#internationalization)
+    - [Privacy and Security](#privacy-and-security)
+  - [References \& acknowledgements](#references--acknowledgements)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
 ## Introduction
 
-This explainer proposes new CSS properties to allow for transitions and
-animations to be applied progressively to units of text (such as words) within a
-given element.
+This explainer proposes new CSS features to allow for effects to be applied
+to units of text (such as words) within a given element.
 
 ## User-Facing Problem
 
@@ -76,75 +85,33 @@ reuse that logic for animation purposes.
 
 ### Goals
 
-- Provide a means of animating text at sub-element units.
+- Provide a means of styling and animating text at sub-element units.
 
-<!--
 ### Non-goals
 
-[If there are "adjacent" goals which may appear to be in scope but aren't,
-enumerate them here. This section may be fleshed out as your design progresses and you encounter necessary technical and other trade-offs.]
+- **Defining how sub-element units are determined across languages.**
+Different languages have widely varying rules for how text units can be grouped into lines
+of text, word units, or even letter units. The idea of addressing sub-element use of text depends
+on these concepts, but we do not seek to define them here.
+Implementations already need to work with these concepts in order to perform text layout, and
+CSS defers the exact details of these breaks to implementations; see
+[CSS Text 3](https://drafts.csswg.org/css-text-3/#line-breaking).
+Additionally, [Intl.Segmenter](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Segmenter)
+provides one set of breaking algorithms available to author script; an implementation that
+supports Intl.Segmenter could reuse those algorithms to implement this proposal.
 
-[[None yet.]]
--->
-
-<!--
 ## User research
 
-[If any user research has been conducted to inform the design choices presented,
-discuss the process and findings.
-We strongly encourage that API designers consider conducting user research to
-verify that their designs meet user needs and iterate on them,
-though we understand this is not always feasible.]
+https://github.com/w3c/csswg-drafts/issues/3208
 
-[[TBD; we need to validate this approach with interested partners.]]
--->
 
 ## Proposed Approach
 
-We introduce four new CSS properties:
+### `::nth-word()` and `::nth-letter()` pseudo-elements
 
-```
-transition-text-interval: <time [0s,∞]>#
-transition-text-unit: [ none | character | word | line ]#
-animation-text-interval: <time [0s,∞]>#
-animation-text-unit: [ none | character | word | line ]#
-```
+### The `parse()` function
 
-**`*-text-unit`** specifies the unit of text that the transition or animation is
-applied to progressively. When set to a value other than `none`, each successive
-unit within the element starts its transition or animation after a staggered
-delay.
-
-- `none`: The transition or animation applies to the element as a whole, as in
-  current behavior. (This value is provided so that, when an element has
-  multiple properties listed in `transition-property`, the author can choose to
-  have some of them act as text transitions and others act as whole-element
-  transitions.)
-- `character`: Each character is treated as a unit.
-- `word` (initial value): Each word (as determined by the UA's word breaking
-  algorithm) is treated as a unit.
-- `line`: Each line box is treated as a unit.
-
-**`*-text-interval`** specifies the delay between successive text units
-beginning their transition or animation. For example, if
-`transition-text-interval` is `6ms`, `transition-text-unit` is `word`, and
-`transition-duration` is `100ms`, the first word starts immediately, the second
-word starts at 6 ms, the third at 12 ms, and so on. The first word subsequently
-finishes at 100 ms, the second at 106 ms, and so on.
-
-- Initial value: `0s`
-
-These properties take lists of values to integrate with existing support for
-animating multiple properties in CSS Transitions and Animations. They follow the
-same list behaviors as `transition-duration`, `transition-delay`,
-`transition-timing-function`, etc.
-
-Shorthands are also provided to set each pair of properties together:
-
-```css
-transition-text: 60ms word;
-animation-text: 150ms character;
-```
+https://github.com/w3c/csswg-drafts/issues/12488
 
 <!--
 ### Dependencies on non-stable features
@@ -163,13 +130,15 @@ Authors could achieve a flow-in animation as follows:
 ```html
 <style>
   .fade-in-text {
+    counter-reset: wordcount;
+  }
+  .fade-in-text::nth-word(n) {
     opacity: 1;
     transition: opacity 600ms;
-    transition-text-unit: word;
-    transition-text-interval: 6ms;
+    transition-delay: calc(6ms * parse(<number> counter(wordcount)));
   }
   @starting-style {
-    .fade-in-text {
+    .fade-in-text::nth-word(n) {
       opacity: 0;
     }
   }
@@ -195,9 +164,12 @@ Authors could animate "..." dots bouncing up and down in sequence:
     }
   }
   .typing-dots {
+    counter-reset: lettercount;
+  }
+  .typing-dots::nth-letter(n) {
     animation: dot-bounce 1s ease-in-out infinite;
-    animation-text-unit: character;
-    animation-text-interval: 150ms;
+    animation-delay: calc(150ms * parse(<number> counter(lettercount)));
+    counter-increment: lettercount;
   }
 </style>
 <!-- ... -->
@@ -222,9 +194,12 @@ Authors could apply a looping shimmer effect that fades across characters:
     }
   }
   .loading-text {
+    counter-reset: lettercount;
+  }
+  .loading-text::nth-letter(n) {
     animation: shimmer 1.5s ease-in-out infinite;
-    animation-text-unit: character;
-    animation-text-interval: 100ms;
+    animation-delay: calc(100ms * parse(<number> counter(lettercount)));
+    counter-increment: lettercount;
   }
 </style>
 <!-- ... -->
@@ -235,146 +210,103 @@ Authors could apply a looping shimmer effect that fades across characters:
 
 ### Details and open questions
 
-#### Animation application
-
-The end state of any text transition or animation should be the same as if the
-changed property were applied to the element as a whole. In many cases, but not
-all, the overall effect will be equivalent to what would result if the author
-had enclosed each text unit in its own `<span>` and applied the transition or
-animation to each of them individually, with appropriate delays to each unit.
-(Details to be fleshed out in the specification.)
-
-This does create complications for properties that affect size and position of
-elements. For example, scale transforms applied to individual words produce a
-very different effect from a single scale transform applied to a group of words:
-
-![Example scale transform applied to sentences versus words](images/scale-transform.gif)
-
-Implementations will need to adjust the individual transforms so that the
-word-by-word animations produce the same final results as the whole-element
-animations.
-
 #### Nested elements
 
-When `*-text-unit` is set on an element, the animation sequences through all
-text content within that element, including text in descendant elements. For
-example:
+Text unit counting only counts words within the target element,
+not descendants. This gives authors flexibility to treat certain
+sub-elements as atomic units rather than counting the words in them.
+For example:
 
 ```html
-<div class="fade-in-text">
-  <p>First piece of text</p>
-  <p>Second piece of text</p>
-</div>
+<p>
+  Here is the <b>code sample</b> you asked for:
+  <pre>
+    int main() {
+      printf("Hello world\n");
+    }
+  </pre>
+  Compile it with your favorite <b>C compiler</b> and run it.
+</p>
 ```
 
-Here, the words in the first `<p>` animate in sequence, followed by the words in
-the second `<p>`, as a single continuous timeline owned by the `<div>`.
-
-However, if a text-interval animation also cascades to a descendant element,
-that element establishes its own independent timeline:
-
-```html
-<div class="fade-in-text">
-  <p>First piece of text</p>
-  <p class="fade-in-text">Second piece of text</p>
-</div>
+```css
+  p {
+    counter-reset: wordcount;
+  }
+  p::nth-word(n),
+  p > ::is(b, i, u)::nth-word(n) {
+    counter-increment: wordcount;
+  }
+  p > ::is(pre, table, img) {
+    /* treat these as atomic units */
+    counter-increment: wordcount;
+  }
 ```
 
-In this case, the second `<p>` would animate its text on its own timeline rather
-than waiting for the `<div>` to sequence through the first `<p>`'s text.
-
-Inline non-text child elements should also participate in the text animation
-flow. For example, given the following:
-
-```html
-<div class="fade-in-text">
-  <span>some preceding content</span>
-  <img src="icon.jpg" />
-  <span>trailing</span>
-</div>
-```
-
-The descendant image should participate in the animation as if it were a word
-between "content" and "trailing".
-
-#### Adding text content to an element
-
-When text content is appended to an element that has already started animating
-(e.g., in a streaming response scenario), the newly added text picks up where
-the previous text would leave off.
-
-```js
-// Animates 'Hello'
-element.appendChild(document.createTextNode("Hello"));
-
-// Appends ' world' to the tail end of any running animation, or starts a new
-// animation for just ' world' if the previous animation has already finished
-element.appendChild(document.createTextNode(" world"));
-```
-
-When text is fully replaced (not an append), the animation restarts for all
-content:
-
-```js
-// Animates 'Hello'
-element.innerText = "Hello";
-
-// Full replacement; restarts animation from the beginning
-element.innerText = "Abcde fghij hijkl";
-```
-
-This includes operations that are semantically a replacement even if a leading
-substring is shared:
-
-```js
-// Animates 'Hello'
-element.innerText = "Hello";
-
-// Restarts and animates 'Hello world'
-element.innerText = "Hello world";
-```
+#### Words spanning element boundaries
 
 #### Generated content
 
-How these properties interact with CSS generated content (via `::before`,
-`::after`, and the `content` property) is an open question. Generated text
-content could potentially participate in the same animation sequence as the
-element's other text content.
+`::nth-word()` and `::nth-letter()` should work with any generated content pseudo-elements
+that are themselves tree-abiding.
 
-#### Animation and transition events
+```css
+.new-item::before {
+  content: "New Item";
+}
+.new-item::before::nth-word(2n) {
+  color: red;
+}
+.new-item::before::nth-word(2n+1) {
+  color: blue;
+}
+```
 
-The `animationend` or `transitionend` event fires on the element once the last
-text unit completes its animation. This means the event fires later than it
-would without text intervals. For example, if `transition-duration` is `600ms`,
-`transition-text-unit` is `word`, and `transition-text-interval` is `6ms`, a
-paragraph containing three words would fire `transitionend` at 612 ms (the last
-word starts at 12 ms and finishes 600 ms later) rather than at 600 ms.
-
-<!--
 ## Alternatives considered
 
-[This should include as many alternatives as you can,
-from high level architectural decisions down to alternative naming choices.]
+### Text animation properties
 
-### [Alternative 1]
+A previous verstion of this explainer contemplated four new CSS properties:
 
-[Describe an alternative which was considered,
-and why you decided against it.
-This alternative may have been part of a prior proposal in the same area,
-or it may be new.
-If you did any research in making this decision, discuss it here.]
+```
+transition-text-interval: <time [0s,∞]>#
+transition-text-unit: [ none | character | word | line ]#
+animation-text-interval: <time [0s,∞]>#
+animation-text-unit: [ none | character | word | line ]#
+```
 
-### [Alternative 2]
+**`*-text-unit`** specifies the unit of text that the transition or animation is
+applied to progressively. When set to a value other than `none`, each successive
+unit within the element starts its transition or animation after a staggered
+delay.
 
-[You may not have decided about some alternatives.
-Describe them as open questions here, and adjust the description once you make a decision.]
+**`*-text-interval`** specifies the delay between successive text units
+beginning their transition or animation. For example, if
+`transition-text-interval` is `6ms`, `transition-text-unit` is `word`, and
+`transition-duration` is `100ms`, the first word starts immediately, the second
+word starts at 6 ms, the third at 12 ms, and so on. The first word subsequently
+finishes at 100 ms, the second at 106 ms, and so on.
 
-### [Alternative 3]
+Issues with this approach:
 
-[etc.]
+* Too tightly focused on animation scenarios.
+* Loses representability of intermediate values.
 
-[[TBD.]]
--->
+### Custom Highlights
+
+One might contemplate using the
+[CSS Custom Highlight API](https://developer.mozilla.org/en-US/docs/Web/API/CSS_Custom_Highlight_API)
+to solve the "flow-in text" scenario.
+However, there are a few issues with this approach:
+
+- Highlight pseudo-elements currently do not support opacity, transition, or animation properties.
+- It's not practical to run the interpolation in JS because there's no inline style on highlight-affected text. You would need one ::highlight() rule per possible opacity value in a given frame. Would also give up composition.
+- If we define CSS transition behavior for highlight ranges, we would still need to block-ify text and maintain style state at sub-element levels. Seems like a similar degree of complexity to ::nth-word().
+- The author would need to drive movement of the Range through Javascript instead of having a purely declarative solution.
+- As a consequence, staggered-start animations would be constrained by main-thread frame budget and refresh interval.
+Some designs call for stagger intervals below the 16.7ms refresh interval on a 60Hz monitor.
+
+### `word-index()` instead of using counters
 
 ## Prior Art
 
