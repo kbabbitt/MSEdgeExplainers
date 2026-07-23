@@ -25,18 +25,15 @@
   - [User research](#user-research)
   - [Proposed Approach](#proposed-approach)
     - [`::nth-word()` and `::nth-letter()` pseudo-elements](#nth-word-and-nth-letter-pseudo-elements)
+      - [Tree-abiding versus non-tree-abiding](#tree-abiding-versus-non-tree-abiding)
     - [The `parse()` function](#the-parse-function)
     - [Scenario 1: Flowing in text](#scenario-1-flowing-in-text)
+      - [Variant: Flowing in text with block descendants](#variant-flowing-in-text-with-block-descendants)
     - [Scenario 2: Typing indicator](#scenario-2-typing-indicator)
     - [Scenario 3: Loading shimmer](#scenario-3-loading-shimmer)
-    - [Details and open questions](#details-and-open-questions)
-      - [Nested elements](#nested-elements)
-      - [Words spanning element boundaries](#words-spanning-element-boundaries)
-      - [Generated content](#generated-content)
   - [Alternatives considered](#alternatives-considered)
     - [Text animation properties](#text-animation-properties)
     - [Custom Highlights](#custom-highlights)
-    - [`word-index()` instead of using counters](#word-index-instead-of-using-counters)
   - [Prior Art](#prior-art)
   - [Accessibility, Internationalization, Privacy, and Security Considerations](#accessibility-internationalization-privacy-and-security-considerations)
     - [Accessibility](#accessibility)
@@ -85,20 +82,17 @@ reuse that logic for animation purposes.
 
 ### Goals
 
-- Provide a means of styling and animating text at sub-element units.
+- Provide a means of styling and animating text at sub-element units: words and letters.
 
 ### Non-goals
 
 - **Defining how sub-element units are determined across languages.**
-Different languages have widely varying rules for how text units can be grouped into lines
-of text, word units, or even letter units. The idea of addressing sub-element use of text depends
+Different languages have widely varying rules for how text units can be grouped into
+"word" or "letter" units. The idea of addressing sub-element use of text depends
 on these concepts, but we do not seek to define them here.
-Implementations already need to work with these concepts in order to perform text layout, and
-CSS defers the exact details of these breaks to implementations; see
-[CSS Text 3](https://drafts.csswg.org/css-text-3/#line-breaking).
-Additionally, [Intl.Segmenter](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/Segmenter)
-provides one set of breaking algorithms available to author script; an implementation that
-supports Intl.Segmenter could reuse those algorithms to implement this proposal.
+Historically, CSS has deferred the exact details of these breaks to implementations and/or
+other standards; see [CSS Text 3](https://drafts.csswg.org/css-text-3) which defers to
+[UAX29](https://www.unicode.org/reports/tr29/tr29-47.html).
 
 ## User research
 
@@ -109,19 +103,57 @@ https://github.com/w3c/csswg-drafts/issues/3208
 
 ### `::nth-word()` and `::nth-letter()` pseudo-elements
 
+These pseudo-elements which select, respectively, the nth word or
+grapheme cluster ("letter") in the text associated with an element.
+Both selectors accept "an+b" style arguments, similar to `::nth-child()`.
+
+Word and letter counting include units in inline descendants. This is necessary to maintain
+a coherent notion of "word" in cases where inline descendant boundaries fall in the middle
+of words.
+
+Word and letter counting skip over block descendants. This gives authors flexibility
+in determining how block descendants participate in stagger effects. An author might
+choose to treat a `<pre>` containing a code sample as a single unit, for example, but
+treat each cell in a `<table>` as a word-like unit.
+
+#### Tree-abiding versus non-tree-abiding
+
+A major decision point is whether or not these pseudo-elements are
+[tree-abiding](https://drafts.csswg.org/css-pseudo-4/#treelike).
+Unlike `::first-line`, `::nth-word()` and `::nth-letter()` can be made tree-abiding
+because determining each selected region of text is not dependent on layout.
+
+The key advantage of making these pseudo-elements tree-abiding is that it
+allows for the use of CSS counters, which gives authors greater flexibility in
+per-word styling and integrating effects with surrounding content.
+However, making words tree-abiding also presents a complication:
+how to handle element boundaries that appear in the middle of words.
+
+Another approach would be to make these pseudo-elements non-tree-abiding,
+much like `::highlight()`, which would sidestep element overlap issues but trade
+away counter support. If we did that, staggering effects could still be achieved
+through introduction of `word-index()` and `letter-index()` functions, akin to
+`sibling-index()`. However, this approach is much less flexible than counters.
+It trades away a great deal of author control over things like how block descendants
+integrate with per-word flow, and how per-word effects are coordinated across
+block boxes (sibling paragraphs, for example).
+
 ### The `parse()` function
 
 https://github.com/w3c/csswg-drafts/issues/12488
 
-<!--
-### Dependencies on non-stable features
+Hypothetically, tree-abiding `::nth-word()` and `::nth-letter()`,
+used in conjunction with CSS counters,
+would unlock a powerful capability: parameterizing CSS property values as a function of text position.
 
-[If your proposed solution depends on any other features that haven't been either implemented by
-multiple browser engines or adopted by a standards working group (that is, not just a W3C community
-group), list them here.]
+However, there is one functional gap: CSS counters are rendered as strings rather than numeric values,
+so they cannot be used directly in `calc()` expressions to compute things like animation delay or color channel values.
+The proposed `parse()` function bridges this gap by letting the author parse the counter string to a numeric value.
 
-[[No such dependencies.]]
--->
+*Footnote: Tomas Rezac found a way to bridge this gap today with clever use of custom property registrations;
+see [blog post](https://dev.to/rezi/css-counting-magic-converting-counter-values-to-variables-e9m)
+and [Codepen](https://codepen.io/rezi-the-lessful/pen/gbpNPaR).
+It would be much nicer to have this supported directly by the platform, though.*
 
 ### Scenario 1: Flowing in text
 
@@ -146,6 +178,39 @@ Authors could achieve a flow-in animation as follows:
 ```
 
 ![Flowing in text animation](images/text-stream.gif)
+
+#### Variant: Flowing in text with block descendants
+
+This example demonstrates the power of having access to counters for these scenarios.
+
+```html
+<p>
+  Here is the <b>code sample</b> you asked for:
+  <pre>
+    int main() {
+      printf("Hello world\n");
+    }
+  </pre>
+  Compile it with your favorite <b>C compiler</b> and run it.
+</p>
+```
+
+```css
+  p {
+    counter-reset: wordcount;
+  }
+  p::nth-word(n) {
+    counter-increment: wordcount;
+  }
+  /* treat these as atomic units */
+  p > ::is(pre, img) {
+    counter-increment: wordcount;
+  }
+  /* stagger in tables cell-by-cell */
+  p td {
+    counter-increment: wordcount;
+  }
+```
 
 ### Scenario 2: Typing indicator
 
@@ -208,60 +273,6 @@ Authors could apply a looping shimmer effect that fades across characters:
 
 ![Loading shimmer animation](images/loading-shimmer.gif)
 
-### Details and open questions
-
-#### Nested elements
-
-Text unit counting only counts words within the target element,
-not descendants. This gives authors flexibility to treat certain
-sub-elements as atomic units rather than counting the words in them.
-For example:
-
-```html
-<p>
-  Here is the <b>code sample</b> you asked for:
-  <pre>
-    int main() {
-      printf("Hello world\n");
-    }
-  </pre>
-  Compile it with your favorite <b>C compiler</b> and run it.
-</p>
-```
-
-```css
-  p {
-    counter-reset: wordcount;
-  }
-  p::nth-word(n),
-  p > ::is(b, i, u)::nth-word(n) {
-    counter-increment: wordcount;
-  }
-  p > ::is(pre, table, img) {
-    /* treat these as atomic units */
-    counter-increment: wordcount;
-  }
-```
-
-#### Words spanning element boundaries
-
-#### Generated content
-
-`::nth-word()` and `::nth-letter()` should work with any generated content pseudo-elements
-that are themselves tree-abiding.
-
-```css
-.new-item::before {
-  content: "New Item";
-}
-.new-item::before::nth-word(2n) {
-  color: red;
-}
-.new-item::before::nth-word(2n+1) {
-  color: blue;
-}
-```
-
 ## Alternatives considered
 
 ### Text animation properties
@@ -299,14 +310,13 @@ One might contemplate using the
 to solve the "flow-in text" scenario.
 However, there are a few issues with this approach:
 
-- Highlight pseudo-elements currently do not support opacity, transition, or animation properties.
-- It's not practical to run the interpolation in JS because there's no inline style on highlight-affected text. You would need one ::highlight() rule per possible opacity value in a given frame. Would also give up composition.
-- If we define CSS transition behavior for highlight ranges, we would still need to block-ify text and maintain style state at sub-element levels. Seems like a similar degree of complexity to ::nth-word().
-- The author would need to drive movement of the Range through Javascript instead of having a purely declarative solution.
-- As a consequence, staggered-start animations would be constrained by main-thread frame budget and refresh interval.
-Some designs call for stagger intervals below the 16.7ms refresh interval on a 60Hz monitor.
-
-### `word-index()` instead of using counters
+* Highlight pseudo-elements currently do not support opacity, transition, or animation properties.
+* Supporting transitions as text enters or exits a highlight range would still require sub-element text
+  fragmentation work similar to what we need for ::nth-letter() and ::nth-word().
+* Authors would still need to do the work to determine "word" boundaries in JavaScript.
+* Authors would also need to drive movement of Ranges in JavaScript.
+  As a consequence, staggered-start animations would be constrained by main-thread frame budget and refresh interval.
+* It's not practical to interpolate opacity in JavaScript because there's no inline style on highlight-affected text.
 
 ## Prior Art
 
@@ -367,6 +377,7 @@ Many thanks for valuable feedback and advice from:
 - Kurt Catti-Schmidt
 - Mike Jackson
 - Sushanth Rajasankar
+- Tab Atkins Jr.
 
 Thanks to the following proposals, projects, libraries, frameworks, and
 languages for their work on similar problems that influenced this proposal.
